@@ -4,7 +4,7 @@ CSE 111: Database Systems Project
 
 To clone repository:
 
-https://github.com/EthanHom/Visual-Novel-Game.git
+" git clone https://github.com/EthanHom/Visual-Novel-Game.git "
 
 Commit and Push:
 
