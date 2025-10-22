@@ -1,5 +1,6 @@
 # Visual-Novel-Game
 CSE 111: Database Systems Project
+Ethan Hom and Cristian Parker
 
 
 To clone repository:
