@@ -1,27 +1,22 @@
-# Visual-Novel-Game
+# Visual Novel Game
+
 CSE 111: Database Systems Project
 Ethan Hom and Cristian Parker
 
-
-To clone repository:
-
-git clone https://github.com/EthanHom/Visual-Novel-Game.git
-
-Commit and Push:
-git add .
-git commit -m "Commit files"
-git push
-
-
-
-
-# Visual Novel Engine - Phase 2 Implementation
-
-Team Members: Cristian Parker & Ethan Hom
-
 ## Project Overview
 
-This is Phase 2 of the Visual Novel Engine project, implementing a complete backend and frontend system using Python and SQLite3. The project follows the database schema designed in Phase 1.
+Implements a backend and frontend using Python and SQLite3.
+
+
+## To clone repository:
+
+`git clone https://github.com/EthanHom/Visual-Novel-Game.git`
+
+## Commit and Push to Repository:
+    git add .
+    git commit -m "Commit files"
+    git push
+
 
 ## Features
 
@@ -41,6 +36,3 @@ This is Phase 2 of the Visual Novel Engine project, implementing a complete back
 - **Choice Selection**: Player decision-making
 - **Event Triggering**: Automatic event handling
 - **Save/Load System**: Preserve game progress
-
-## Project Structure
-
