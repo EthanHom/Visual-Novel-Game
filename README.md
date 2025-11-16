@@ -5,10 +5,12 @@ By: Ethan Hom and Cristian Parker
 CSE 111: Database Systems project. The game implements a backend and frontend using Python and SQLite3.
 
 
-## To clone repository:
+## Git commands
+
+### To clone repository:
 `git clone https://github.com/EthanHom/Visual-Novel-Game.git`
 
-## Commit and Push to Repository:
+### Commit and Push to Repository:
     git add .
     git commit -m "Commit files"
     git push
