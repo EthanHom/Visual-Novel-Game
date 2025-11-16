@@ -159,7 +159,7 @@ def interactive_game_demo():
 
 def main():
     """Main program"""
-    print("Visual Novel Engine - Phase 2 Implementation")
+    print("Visual Novel Game")
     print("=" * 60)
     
     while True:

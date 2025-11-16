@@ -1,5 +1,3 @@
--- Example SELECT queries (you can include comments that map to use-cases)
-
 -- 1. List all characters
 SELECT char_id, char_name, text_color
 FROM Characters;
