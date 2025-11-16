@@ -1,15 +1,11 @@
 # Visual Novel Game
-
-CSE 111: Database Systems Project
-Ethan Hom and Cristian Parker
+By: Ethan Hom and Cristian Parker
 
 ## Project Overview
-
-Implements a backend and frontend using Python and SQLite3.
+CSE 111: Database Systems project. The game implements a backend and frontend using Python and SQLite3.
 
 
 ## To clone repository:
-
 `git clone https://github.com/EthanHom/Visual-Novel-Game.git`
 
 ## Commit and Push to Repository:
