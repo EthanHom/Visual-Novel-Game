@@ -52,12 +52,13 @@ def insert_line(conn, line):
     return cur.lastrowid
 
 def insert_sample_data(conn):
-    """ Inserts a full set of sample data into the database """
+    """ Inserts a full set of data into the database """
     try:
         with conn:
             # --- Locations ---
-            loc1 = insert_location(conn, ('The Library', '/img/bg/library.png'))
-            loc2 = insert_location(conn, ('Town Square', '/img/bg/square.png'))
+            # example: loc1 = insert_location(conn, ('The Library', '/img/bg/library.png'))
+            loc1 = insert_location(conn, ('The Library', ''))
+            loc2 = insert_location(conn, ('Town Square', ''))
 
             # --- Characters ---
             # Using specific IDs to make foreign keys easier to track
@@ -71,9 +72,13 @@ def insert_sample_data(conn):
 
             # --- Sprites ---
             # expression_id: 1=neutral, 2=happy, 3=sad, 4=angry
-            sprite1 = insert_sprite(conn, (2, 1, 'neutral', '/img/sprites/maya_neutral.png'))
-            sprite2 = insert_sprite(conn, (2, 2, 'happy', '/img/sprites/maya_happy.png'))
-            sprite3 = insert_sprite(conn, (3, 1, 'neutral', '/img/sprites/detective_neutral.png'))
+            # example: 
+                # sprite1 = insert_sprite(conn, (2, 1, 'neutral', '/img/sprites/maya_neutral.png'))
+                # sprite2 = insert_sprite(conn, (2, 2, 'happy', '/img/sprites/maya_happy.png'))
+                # sprite3 = insert_sprite(conn, (3, 1, 'neutral', '/img/sprites/detective_neutral.png'))
+            sprite1 = insert_sprite(conn, (2, 1, 'neutral', ''))
+            sprite2 = insert_sprite(conn, (2, 2, 'happy', ''))
+            sprite3 = insert_sprite(conn, (3, 1, 'neutral', ''))
 
             # --- Scenes ---
             # Using specific IDs for easy linking
@@ -106,7 +111,7 @@ def insert_sample_data(conn):
             insert_choice(conn, (1, 'Investigate the Library.', 2, evt2)) # Links to scene 2, triggers event 2
             insert_choice(conn, (1, 'Check the Town Square again.', 3, None)) # Links to scene 3
 
-        print("Sample data inserted successfully.")
+        print("Data inserted successfully.")
     except Error as e:
         print(e)
 

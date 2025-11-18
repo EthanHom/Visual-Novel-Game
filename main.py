@@ -5,7 +5,7 @@ from insert_data import insert_sample_data
 import queries as q
 
 def run_demo():
-    """ Runs a full demo: create, populate, and query """
+    """ Running: create, populate, and query """
     
     # Delete old database file if it exists
     if os.path.exists(DATABASE_FILE):
@@ -25,11 +25,11 @@ def run_demo():
     print("\n--- DATABASE CREATED AND POPULATED ---")
 
     # --- SIMULATE BACKEND USE ---
-    print("\n--- DEMO: BACKEND QUERIES ---")
+    print("\n--- BACKEND QUERIES ---")
     
     # 1. Add a new character
-    print("\nAdding new character 'Yuki'...")
-    new_char_id = q.add_character(conn, 'Yuki', 'FFD700')
+    print("\nAdding new character 'Apollo'...")
+    new_char_id = q.add_character(conn, 'Apollo', 'FFD700')
     print(f"New character ID: {new_char_id}")
 
     # 2. Get all characters
@@ -63,8 +63,8 @@ def run_demo():
         print(f"  ID: {char[0]}, Name: {char[1]}")
 
 
-    # --- SIMULATE GAMEPLAY ---
-    print("\n--- DEMO: GAMEPLAY QUERIES ---")
+    # --- GAMEPLAY ---
+    print("\n--- GAMEPLAY QUERIES ---")
     
     current_scene_id = 1
     
@@ -111,7 +111,7 @@ def run_demo():
             print(f"  > Event {event_triggered} status is now: {status[0][0]}")
 
     conn.close()
-    print("\nDemo complete. Connection closed.")
+    print("\nCompleted. Connection closed.")
 
 if __name__ == '__main__':
     run_demo()
