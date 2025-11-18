@@ -5,7 +5,7 @@ from insert_data import insert_data
 import queries as q
 
 def run():
-    """ Running: create, populate, and query """
+    # Running: create, populate, and query 
     
     # Delete old database file if it exists
     if os.path.exists(DATABASE_FILE):
@@ -22,10 +22,10 @@ def run():
     # Populate with data
     insert_data(conn)
 
-    print("\n--- DATABASE CREATED AND POPULATED ---")
+    print("\nDATABASE CREATED AND POPULATED")
 
     # --- SIMULATE BACKEND USE ---
-    print("\n--- BACKEND QUERIES ---")
+    print("\nBACKEND QUERIES:")
     
     # 1. Add a new character
     print("\nAdding new character 'Apollo'...")
@@ -64,7 +64,7 @@ def run():
 
 
     # --- GAMEPLAY ---
-    print("\n--- GAMEPLAY QUERIES ---")
+    print("\nGAMEPLAY QUERIES:")
     
     current_scene_id = 1
     
