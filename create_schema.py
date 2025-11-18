@@ -1,7 +1,7 @@
 import sqlite3
 from sqlite3 import Error
 
-DATABASE_FILE = "vne.db"
+DATABASE_FILE = "visual_novel_engine.db"
 
 def create_connection():
     """ create a database connection to the SQLite database
