@@ -51,7 +51,7 @@ def insert_line(conn, line):
     cur.execute(sql, line)
     return cur.lastrowid
 
-def insert_sample_data(conn):
+def insert_data(conn):
     """ Inserts a full set of data into the database """
     try:
         with conn:
@@ -118,5 +118,5 @@ def insert_sample_data(conn):
 if __name__ == '__main__':
     conn = create_connection()
     if conn:
-        insert_sample_data(conn)
+        insert_data(conn)
         conn.close()

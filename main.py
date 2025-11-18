@@ -1,10 +1,10 @@
 import sqlite3
 import os
 from create_schema import create_connection, create_all_tables, DATABASE_FILE
-from insert_data import insert_sample_data
+from insert_data import insert_data
 import queries as q
 
-def run_demo():
+def run():
     """ Running: create, populate, and query """
     
     # Delete old database file if it exists
@@ -19,8 +19,8 @@ def run_demo():
 
     create_all_tables(conn)
     
-    # Populate with sample data
-    insert_sample_data(conn)
+    # Populate with data
+    insert_data(conn)
 
     print("\n--- DATABASE CREATED AND POPULATED ---")
 
@@ -114,4 +114,4 @@ def run_demo():
     print("\nCompleted. Connection closed.")
 
 if __name__ == '__main__':
-    run_demo()
+    run()
