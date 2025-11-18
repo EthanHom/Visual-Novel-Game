@@ -16,7 +16,7 @@ CSE 111: Database Systems project. The game implements a backend and frontend us
     git push
 
 
-## Features
+<!-- ## Features
 
 ### Backend Operations (Game Designer)
 - **Character Management**: Create, read, update, delete characters
@@ -33,4 +33,4 @@ CSE 111: Database Systems project. The game implements a backend and frontend us
 - **Scene Navigation**: Automatic progression through scenes
 - **Choice Selection**: Player decision-making
 - **Event Triggering**: Automatic event handling
-- **Save/Load System**: Preserve game progress
+- **Save/Load System**: Preserve game progress -->
