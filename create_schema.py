@@ -4,14 +4,10 @@ from sqlite3 import Error
 DATABASE_FILE = "visual_novel_engine.db"
 
 def create_connection():
-    """ create a database connection to the SQLite database
-        specified by DATABASE_FILE
-    :return: Connection object or None
-    """
+    # database connection to SQLite database
     conn = None
     try:
         conn = sqlite3.connect(DATABASE_FILE)
-        print(f"Connected to SQLite database (version {sqlite3.version})")
         # Enable foreign key support
         conn.execute("PRAGMA foreign_keys = ON;")
         return conn
@@ -21,10 +17,7 @@ def create_connection():
     return conn
 
 def create_table(conn, create_table_sql):
-    """ create a table from the create_table_sql statement
-    :param conn: Connection object
-    :param create_table_sql: a CREATE TABLE statement
-    """
+    # create a table from create_table_sql
     try:
         c = conn.cursor()
         c.execute(create_table_sql)
@@ -32,8 +25,7 @@ def create_table(conn, create_table_sql):
         print(e)
 
 def create_all_tables(conn):
-    """ Creates all tables for the Visual Novel Engine database """
-    
+
     sql_create_locations_table = """
     CREATE TABLE IF NOT EXISTS Locations (
         location_id INTEGER PRIMARY KEY,
@@ -83,8 +75,6 @@ def create_all_tables(conn):
     );
     """
     
-    # Note: Added 'decision_text' as it's implied by the use case (Page 8)
-    # but missing from the schema diagram (Page 5).
     sql_create_choices_table = """
     CREATE TABLE IF NOT EXISTS Choices (
         decision_id INTEGER PRIMARY KEY,
@@ -129,7 +119,7 @@ def create_all_tables(conn):
         create_table(conn, sql_create_lines_table)
         print("All tables created successfully.")
     else:
-        print("Error! cannot create the database connection.")
+        print("Error! Can't create the database connection.")
 
 if __name__ == '__main__':
     conn = create_connection()

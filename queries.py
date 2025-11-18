@@ -1,9 +1,8 @@
 import sqlite3
 from sqlite3 import Error
 
-# --- Utility Function ---
 def fetch_all(conn, sql, params=()):
-    """ Utility to run a SELECT query and fetch all results """
+    # run a SELECT query and return all results
     try:
         c = conn.cursor()
         c.execute(sql, params)
@@ -13,7 +12,7 @@ def fetch_all(conn, sql, params=()):
         return []
 
 def execute_sql(conn, sql, params=()):
-    """ Utility to run an INSERT, UPDATE, or DELETE query """
+    # run an INSERT, UPDATE, DELETE query
     try:
         c = conn.cursor()
         c.execute(sql, params)
@@ -23,7 +22,6 @@ def execute_sql(conn, sql, params=()):
         print(f"Error: {e}")
         return None
 
-# === USE CASE: BACKEND USER (20 Statements) ===
 
 # 1. (INSERT) Add new character
 def add_character(conn, name, color):
@@ -223,7 +221,7 @@ def get_dialogue_for_scene(conn, scene_id):
 
     UNION
 
-    SELECT l.line_id, l.content, l.sequence, l.choice_id, c.char_name, c.text_color
+    SELECT l.line_id, l.content, l.sequence, l.choice_id, c.char_name, c.text_color, NULL
     FROM Lines l, Characters c
     WHERE l.speaker_id = c.char_id
     AND l.expression_id IS NULL

@@ -55,22 +55,22 @@ def insert_sample_data(conn):
     """ Inserts a full set of data into the database """
     try:
         with conn:
-            # --- Locations ---
+            # Locations
             # example: loc1 = insert_location(conn, ('The Library', '/img/bg/library.png'))
             loc1 = insert_location(conn, ('The Library', ''))
             loc2 = insert_location(conn, ('Town Square', ''))
 
-            # --- Characters ---
+            # Characters
             # Using specific IDs to make foreign keys easier to track
             char1 = insert_character(conn, (1, 'Protagonist', 'FFFFFF'))
             char2 = insert_character(conn, (2, 'Maya', 'E0BBE4'))
             char3 = insert_character(conn, (3, 'Detective', 'A9A9A9'))
             
-            # --- Events ---
+            # Events
             evt1 = insert_event(conn, ('Met Maya', False))
             evt2 = insert_event(conn, ('Found Clue', False))
 
-            # --- Sprites ---
+            # Sprites
             # expression_id: 1=neutral, 2=happy, 3=sad, 4=angry
             # example: 
                 # sprite1 = insert_sprite(conn, (2, 1, 'neutral', '/img/sprites/maya_neutral.png'))
@@ -80,7 +80,7 @@ def insert_sample_data(conn):
             sprite2 = insert_sprite(conn, (2, 2, 'happy', ''))
             sprite3 = insert_sprite(conn, (3, 1, 'neutral', ''))
 
-            # --- Scenes ---
+            # Scenes
             # Using specific IDs for easy linking
             scene1 = insert_scene(conn, (1, 'Chapter 1: The Meetup', loc2, None))
             scene2 = insert_scene(conn, (2, 'Chapter 1: The Library', loc1, None))
@@ -90,7 +90,7 @@ def insert_sample_data(conn):
             conn.execute("UPDATE Scenes SET next_scene_default = ? WHERE scene_id = ?", (2, 1))
 
 
-            # --- Lines (Dialogue) ---
+            # Lines (Dialogue)
             # Scene 1
             insert_line(conn, (1, 3, 1, 'You must be the new recruit.', 1, None))
             insert_line(conn, (1, 1, 2, 'That I am. You must be the Detective?', 1, None))
@@ -106,7 +106,7 @@ def insert_sample_data(conn):
             # Scene 3
             insert_line(conn, (3, 2, 1, 'The square is so busy today.', 1, None))
 
-            # --- Choices ---
+            # Choices
             # choice_id 1 links to line 7 in scene 1
             insert_choice(conn, (1, 'Investigate the Library.', 2, evt2)) # Links to scene 2, triggers event 2
             insert_choice(conn, (1, 'Check the Town Square again.', 3, None)) # Links to scene 3
