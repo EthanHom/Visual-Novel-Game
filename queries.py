@@ -22,6 +22,7 @@ def execute_sql(conn, sql, params=()):
         print(f"Error: {e}")
         return None
 
+# === USE CASE: BACKEND USER (20 Statements) ===
 
 # 1. (INSERT) Add new character
 def add_character(conn, name, color):
