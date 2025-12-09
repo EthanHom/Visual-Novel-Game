@@ -7,9 +7,9 @@ import re
 from pathlib import Path
 import os
 
-# --- 1. CONFIGURATION (FIXED PATHS) ---
+# --- 1. CONFIGURATION (ABSOLUTE PATHS) ---
 
-# Get the directory where THIS file (Pages.py) is located
+# Resolve the absolute path to the folder containing this script
 BASE_DIR = Path(__file__).parent.resolve()
 DATABASE_FILE = str(BASE_DIR / "visual_novel_engine.db")
 ASSETS_DIR = BASE_DIR / 'assets'
@@ -19,9 +19,12 @@ ASSETS_DIR.mkdir(parents=True, exist_ok=True)
 (ASSETS_DIR / 'bgs').mkdir(parents=True, exist_ok=True)
 (ASSETS_DIR / 'sprites').mkdir(parents=True, exist_ok=True)
 
-# *** CRITICAL FIX: SERVE STATIC FILES FROM ABSOLUTE PATH ***
-print(f"Serving assets from: {ASSETS_DIR}")
+# *** CRITICAL: Serve assets folder to browser ***
+# Browser URL '/assets/...' maps to File System '.../assets/...'
 app.add_static_files('/assets', str(ASSETS_DIR))
+print(f"--- SYSTEM READY ---")
+print(f"Database: {DATABASE_FILE}")
+print(f"Assets:   {ASSETS_DIR}")
 
 def create_connection():
     conn = None
@@ -195,7 +198,6 @@ def characters_content():
             table.on('del', lambda e: delete(e.args)); refresh()
 
 def locations_content():
-    # Use relative path 'assets/bgs' for DB storage, but save to absolute path
     uploaded_bytes, uploaded_ext = None, None
     table = None
     
@@ -206,14 +208,16 @@ def locations_content():
         if name and uploaded_bytes:
             fname = f"{re.sub(r'[^a-z0-9]','_',name.lower())}{uploaded_ext}"
             
-            # Save file to absolute path
+            # 1. Save File to DISK (Absolute Path)
             save_path = ASSETS_DIR / 'bgs' / fname
             save_path.write_bytes(uploaded_bytes)
-            
-            # Store RELATIVE path in DB so URL works
-            # e.g. "assets/bgs/image.png"
+            print(f"Saved BG to: {save_path}")
+
+            # 2. Save Path to DB (Relative for URL)
+            # IMPORTANT: We store 'assets/bgs/...' 
             db_path = f"assets/bgs/{fname}"
             CRUD_MANAGER.create_location(name, db_path)
+            
             uploaded_bytes=None; refresh()
             
     def delete(row): CRUD_MANAGER.delete_location(row['location_id']); refresh()
@@ -243,13 +247,16 @@ def sprites_content():
         if char_select.value and expr_input.value and uploaded_bytes:
             fname = f"{char_select.options[char_select.value]}_{expr_input.value}{uploaded_ext}".lower().replace(' ','_')
             
-            # Save absolute
+            # 1. Save File
             save_path = ASSETS_DIR / 'sprites' / fname
             save_path.write_bytes(uploaded_bytes)
-            
-            # Store relative
+            print(f"Saved Sprite to: {save_path}")
+
+            # 2. Save DB Path
             db_path = f"assets/sprites/{fname}"
-            CRUD_MANAGER.create_sprite(char_select.value, expr_input.value, db_path); uploaded_bytes=None; refresh()
+            CRUD_MANAGER.create_sprite(char_select.value, expr_input.value, db_path)
+            
+            uploaded_bytes=None; refresh()
             
     def delete(row): CRUD_MANAGER.delete_sprite(row['sprite_id']); refresh()
 
@@ -408,7 +415,7 @@ def scenes_page_content():
             table.add_slot('body-cell-act', r'''<q-td :props="props"><q-btn icon="delete" color="negative" flat dense @click="$parent.$emit('del', props.row)"/></q-td>''')
             table.on('del', lambda e: delete(e.args)); refresh()
 
-# --- 4. GAME PLAYER LOGIC (FIXED) ---
+# --- 4. GAME PLAYER LOGIC (FIXED NESTING & Z-INDEX) ---
 
 def player_content():
     class GameState:
@@ -420,23 +427,22 @@ def player_content():
 
     state = GameState()
     
-    # UI Elements (Layers)
-    # Use standard Tailwind classes for positioning
+    # 1. Background Layer (Lowest Z-Index)
     bg_image = ui.image().classes("absolute top-0 left-0 w-full h-full object-cover z-0")
     
-    # Container for sprite, centered horizontally, attached to bottom
+    # 2. Sprite Layer
     sprite_container = ui.element('div').classes("absolute bottom-0 left-1/2 transform -translate-x-1/2 h-4/5 z-10")
     sprite_image = ui.image().classes("h-full object-contain").style("display: none")
     sprite_image.move(sprite_container)
     
-    # Dialogue UI
+    # 3. Dialogue Layer (Highest Z-Index)
+    # FIX: Use 'with' to nest content INSIDE the card
     dialogue_card = ui.card().classes("absolute bottom-8 left-1/2 transform -translate-x-1/2 w-3/4 bg-gray-900/90 text-white p-6 border-2 border-gray-600 rounded-xl z-20")
-    name_label = ui.label("").classes("text-xl font-bold text-yellow-400 mb-2")
-    text_label = ui.label("").classes("text-lg leading-relaxed")
     
-    # Debug Label (Remove after confirming it works)
-    # debug_label = ui.label("Debug Info").classes("absolute top-0 left-0 bg-white text-black z-50")
-
+    with dialogue_card:
+        name_label = ui.label("").classes("text-xl font-bold text-yellow-400 mb-2")
+        text_label = ui.label("").classes("text-lg leading-relaxed")
+    
     next_btn = ui.button("Next >", on_click=lambda: advance()).classes("absolute bottom-8 right-16 z-30")
     choice_container = ui.column().classes("absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 gap-4 z-40")
 
@@ -448,17 +454,15 @@ def player_content():
         
         state.scene_id = scene_id
         
-        # *** FIX: CLEAN PATHS ***
-        # If DB says "assets/bgs/x.png", Browser needs "/assets/bgs/x.png"
+        # PATH FIX: Ensure leading slash
         db_path = details['bg_path']
         if db_path:
-            # Normalize path: ensure it starts with / for browser
-            clean_path = db_path.replace('\\', '/') # Fix windows slashes if any
+            clean_path = db_path.replace('\\', '/')
             if not clean_path.startswith('/'):
                 clean_path = '/' + clean_path
             
+            print(f"LOADING BG: {clean_path}") # Debug print
             state.bg_path = clean_path
-            # debug_label.text = f"Loading BG: {state.bg_path}"
             bg_image.source = state.bg_path
         else:
             bg_image.source = None
@@ -496,17 +500,20 @@ def player_content():
 
         line = state.lines[state.line_idx]
         
+        # UI Updates
         name_label.text = line['char_name']
         name_label.style(f"color: #{line['text_color']}")
         text_label.text = line['content']
         dialogue_card.visible = True
 
+        # Sprite Path Fix
         if line['sprite_path']:
             s_path = line['sprite_path']
             clean_path = s_path.replace('\\', '/')
             if not clean_path.startswith('/'):
                 clean_path = '/' + clean_path
             
+            print(f"LOADING SPRITE: {clean_path}") # Debug print
             sprite_image.source = clean_path
             sprite_image.style("display: block")
         else:
@@ -565,7 +572,8 @@ async def editor_page(): await admin_layout(editor_content)
 
 @ui.page('/play')
 async def player_page():
-    with ui.column().classes('w-full h-screen relative bg-black overflow-hidden'):
+    # Remove 'bg-black' to allow images to be seen underneath
+    with ui.column().classes('w-full h-screen relative overflow-hidden bg-black'):
         ui.button(icon='close', on_click=lambda: ui.run_javascript('window.location.href="/editor"')).classes('absolute top-4 right-4 z-50 bg-red-600 text-white rounded-full')
         player_content()
 
@@ -600,5 +608,4 @@ async def home():
 
 if __name__ in {"__main__", "__mp_main__"}:
     init_db()
-    # Reload=False is safer for assets handling
     ui.run(title="VN Engine", port=8080, reload=False)
