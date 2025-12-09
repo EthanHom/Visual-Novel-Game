@@ -745,6 +745,69 @@ class CRUDManager:
     def update_event_status(self, event_id: int, status: bool) -> bool:
         return bool(self._execute_query("UPDATE Events SET obtained_bool = ? WHERE event_id = ?", (status, event_id), commit=True))
 
+        # --- Event Logic ---
+
+    def create_event_logic(self, start_scene: int, end_scene: int, event_id: int) -> Optional[int]:
+        sql = """
+        INSERT INTO EventLogic (start_scene, end_scene, event_id)
+        VALUES (?, ?, ?)
+        """
+        return self._execute_query(sql, (start_scene, end_scene, event_id), commit=True)
+
+    def get_event_logic_for_scene(self, start_scene: int) -> List[Dict]:
+        sql = """
+        SELECT EL.logic_id, EL.start_scene, EL.end_scene,
+               EL.event_id, E.name AS event_name, E.obtained_bool
+        FROM EventLogic EL
+        JOIN Events E ON EL.event_id = E.event_id
+        WHERE EL.start_scene = ?
+        """
+        return self._execute_query(sql, (start_scene,), fetch_all=True) or []
+
+    def delete_event_logic(self, logic_id: int) -> bool:
+        return bool(self._execute_query(
+            "DELETE FROM EventLogic WHERE logic_id = ?",
+            (logic_id,),
+            commit=True
+        ))
+    
+    def get_next_scene_default(self, scene_id: int) -> Optional[int]:
+        row = self._execute_query(
+            "SELECT next_scene_default FROM Scenes WHERE scene_id = ?",
+            (scene_id,),
+            fetch_one=True
+        )
+        if row and row.get('next_scene_default') is not None:
+            return row['next_scene_default']
+        return None
+
+    def get_next_scene_with_event_logic(self, scene_id: int) -> Optional[int]:
+        logic_row = self._execute_query(
+            """
+            SELECT 
+                COUNT(*) AS total_rules,
+                SUM(CASE WHEN E.obtained_bool = 1 THEN 1 ELSE 0 END) AS satisfied_rules,
+                MAX(EL.end_scene) AS end_scene -- assuming single end_scene per start_scene
+            FROM EventLogic EL
+            JOIN Events E ON EL.event_id = E.event_id
+            WHERE EL.start_scene = ?
+            """,
+            (scene_id,),
+            fetch_one=True
+        )
+
+        if logic_row and logic_row['total_rules'] > 0:
+            total = logic_row['total_rules']
+            satisfied = logic_row['satisfied_rules'] or 0
+            end_scene = logic_row['end_scene']
+
+            # All events for this start_scene are true
+            if satisfied == total and end_scene is not None:
+                return end_scene
+
+        # 2. Fallback: normal default
+        return self.get_next_scene_default(scene_id)
+
     # --- Choices ---
     def get_next_choice_group_id(self) -> int:
         res = self._execute_query("SELECT MAX(choice_id) as max_id FROM Choices", fetch_one=True)
@@ -898,21 +961,168 @@ def sprites_content():
             table.on('del', lambda e: delete(e.args)); refresh()
 
 def events_content():
-    table = None
-    def refresh(): table.rows = CRUD_MANAGER.get_all_events()
-    def add(name):
-        if name: CRUD_MANAGER.create_event(name); refresh()
-    def delete(row): CRUD_MANAGER.delete_event(row['event_id']); refresh()
+    # --- Event flags table ---
+    events_table = None
 
-    with ui.row().classes("w-full gap-8"):
-        with ui.card().classes("w-1/3"):
-            ui.label("Add Event Flag").classes("text-xl font-bold")
-            n = ui.input("Event Name (e.g. 'Met Maya')").classes("w-full")
-            ui.button("Add", on_click=lambda: add(n.value)).classes("mt-4")
-        with ui.card().classes("w-2/3"):
-            table = ui.table(columns=[{'name':'event_id','label':'ID','field':'event_id'}, {'name':'name','label':'Name','field':'name'}, {'name':'obtained_bool','label':'Active?','field':'obtained_bool'}, {'name':'actions','label':'','field':'actions'}], rows=[], row_key='event_id').classes('w-full')
-            table.add_slot('body-cell-actions', r'''<q-td :props="props"><q-btn icon="delete" color="negative" flat dense @click="$parent.$emit('del', props.row)" /></q-td>''')
-            table.on('del', lambda e: delete(e.args)); refresh()
+    # --- Event logic UI elements ---
+    logic_table = None
+    start_scene_select = None
+    end_scene_select = None
+    logic_event_select = None
+
+    # ==== EVENT FLAGS HELPERS ====
+    def refresh_events():
+        events_table.rows = CRUD_MANAGER.get_all_events()
+
+    def add_event(name: str):
+        if name:
+            CRUD_MANAGER.create_event(name)
+            refresh_events()
+            refresh_logic()  # so newly added events show in the logic dropdowns
+
+    def delete_event(row):
+        CRUD_MANAGER.delete_event(row['event_id'])
+        refresh_events()
+        refresh_logic()
+
+    # ==== EVENT LOGIC HELPERS ====
+    def refresh_logic():
+        """Refresh dropdown options and logic table for current start scene."""
+        # Populate scene options
+        scenes = CRUD_MANAGER.get_all_scenes_joined()
+        scene_opts = {s['scene_id']: s['scene_name'] for s in scenes}
+        start_scene_select.set_options(scene_opts)
+        end_scene_select.set_options(scene_opts)
+
+        # Populate event options
+        events = CRUD_MANAGER.get_all_events()
+        event_opts = {e['event_id']: e['name'] for e in events}
+        logic_event_select.set_options(event_opts)
+
+        # Refresh current logic rows (if a start scene is selected)
+        if start_scene_select.value:
+            logic_table.rows = CRUD_MANAGER.get_event_logic_for_scene(start_scene_select.value)
+        else:
+            logic_table.rows = []
+
+    def on_start_scene_change(e):
+        """When user picks a start scene, update the logic table."""
+        val = e.value
+        if val:
+            logic_table.rows = CRUD_MANAGER.get_event_logic_for_scene(val)
+        else:
+            logic_table.rows = []
+
+    def add_logic_rule():
+        """Create a new EventLogic row."""
+        if not start_scene_select.value or not end_scene_select.value or not logic_event_select.value:
+            return ui.notify("Missing Start Scene, End Scene, or Event", color='red')
+
+        CRUD_MANAGER.create_event_logic(
+            start_scene=int(start_scene_select.value),
+            end_scene=int(end_scene_select.value),
+            event_id=int(logic_event_select.value),
+        )
+        ui.notify("Event logic rule added", color='green')
+        refresh_logic()
+
+    def delete_logic_rule(row):
+        CRUD_MANAGER.delete_event_logic(row['logic_id'])
+        ui.notify("Event logic rule deleted", color='orange')
+        refresh_logic()
+
+    # ================== UI LAYOUT ==================
+    with ui.column().classes("w-full gap-8"):
+        # ---- TOP ROW: EVENT FLAGS ----
+        with ui.row().classes("w-full gap-8"):
+            with ui.card().classes("w-1/3"):
+                ui.label("Add Event Flag").classes("text-xl font-bold")
+                n = ui.input("Event Name (e.g. 'Met Maya')").classes("w-full")
+                ui.button("Add", on_click=lambda: add_event(n.value)).classes("mt-4 w-full")
+            with ui.card().classes("w-2/3"):
+                events_table = ui.table(
+                    columns=[
+                        {'name':'event_id','label':'ID','field':'event_id'},
+                        {'name':'name','label':'Name','field':'name'},
+                        {'name':'obtained_bool','label':'Active?','field':'obtained_bool'},
+                        {'name':'actions','label':'','field':'actions'},
+                    ],
+                    rows=[],
+                    row_key='event_id',
+                ).classes('w-full')
+                events_table.add_slot(
+                    'body-cell-actions',
+                    r'''
+                    <q-td :props="props">
+                        <q-btn icon="delete" color="negative" flat dense
+                               @click="$parent.$emit('del', props.row)" />
+                    </q-td>
+                    '''
+                )
+                events_table.on('del', lambda e: delete_event(e.args))
+
+        # ---- SECOND ROW: EVENT LOGIC EDITOR ----
+        with ui.row().classes("w-full gap-8"):
+            # Left card: editor
+            with ui.card().classes("w-1/3"):
+                ui.label("Event Logic (Route Conditions)").classes("text-xl font-bold mb-2")
+                ui.label(
+                    "If ALL rules for a Start Scene have obtained events, "
+                    "jump to End Scene instead of the default."
+                ).classes("text-sm text-gray-600 mb-4")
+
+                start_scene_select = ui.select(
+                    {},
+                    label="Start Scene",
+                    on_change=on_start_scene_change,
+                ).classes("w-full mb-2")
+
+                end_scene_select = ui.select(
+                    {},
+                    label="End Scene (if all events true)",
+                ).classes("w-full mb-2")
+
+                logic_event_select = ui.select(
+                    {},
+                    label="Required Event",
+                ).classes("w-full mb-4")
+
+                ui.button(
+                    "Add Logic Rule",
+                    on_click=add_logic_rule,
+                ).classes("w-full bg-indigo-600 text-white")
+
+            # Right card: logic table
+            with ui.card().classes("w-2/3"):
+                ui.label("Logic Rules for Selected Start Scene").classes("text-lg font-bold mb-2")
+                logic_table = ui.table(
+                    columns=[
+                        {'name': 'logic_id',    'label': 'ID',        'field': 'logic_id'},
+                        {'name': 'start_scene', 'label': 'Start ID',  'field': 'start_scene'},
+                        {'name': 'end_scene',   'label': 'End ID',    'field': 'end_scene'},
+                        {'name': 'event_id',    'label': 'Event ID',  'field': 'event_id'},
+                        {'name': 'event_name',  'label': 'Event',     'field': 'event_name'},
+                        {'name': 'obtained_bool','label':'Obtained?','field':'obtained_bool'},
+                        {'name': 'actions',     'label': '',         'field': 'actions'},
+                    ],
+                    rows=[],
+                    row_key='logic_id',
+                ).classes("w-full")
+                logic_table.add_slot(
+                    'body-cell-actions',
+                    r'''
+                    <q-td :props="props">
+                        <q-btn icon="delete" color="negative" flat dense size="sm"
+                               @click="$parent.$emit('del', props.row)" />
+                    </q-td>
+                    '''
+                )
+                logic_table.on('del', lambda e: delete_logic_rule(e.args))
+
+        # Initial data load
+        refresh_events()
+        refresh_logic()
+
 
 def choices_content():
     table = None
@@ -1125,7 +1335,16 @@ def player_content():
         state.line_idx += 1
         
         if state.line_idx >= len(state.lines):
-            ui.notify("Scene Finished", color='orange')
+            # Ask DB what the next scene should be
+            next_scene = CRUD_MANAGER.get_next_scene_with_event_logic(state.scene_id)
+
+            if next_scene:
+                ui.notify(f"Jumping to scene {next_scene}", color='green')
+                # reset line index & load new scene
+                choice_container.clear()
+                load_scene(next_scene)
+            else:
+                ui.notify("Scene Finished (no next scene).", color='orange')
             return
 
         line = state.lines[state.line_idx]
@@ -1221,7 +1440,21 @@ def init_db():
             "CREATE TABLE IF NOT EXISTS Scenes (scene_id INTEGER PRIMARY KEY, name TEXT NOT NULL, location_id INTEGER, next_scene_default INTEGER, FOREIGN KEY (location_id) REFERENCES Locations (location_id) ON DELETE SET NULL, FOREIGN KEY (next_scene_default) REFERENCES Scenes (scene_id) ON DELETE SET NULL);",
             "CREATE TABLE IF NOT EXISTS Sprites (sprite_id INTEGER PRIMARY KEY, char_id INTEGER NOT NULL, expression_id INTEGER NOT NULL, expression TEXT NOT NULL, path TEXT NOT NULL, FOREIGN KEY (char_id) REFERENCES Characters (char_id) ON DELETE CASCADE);",
             "CREATE TABLE IF NOT EXISTS Choices (decision_id INTEGER PRIMARY KEY, choice_id INTEGER NOT NULL, decision_text TEXT NOT NULL, next_scene INTEGER, event_id INTEGER, FOREIGN KEY (next_scene) REFERENCES Scenes (scene_id) ON DELETE SET NULL, FOREIGN KEY (event_id) REFERENCES Events (event_id) ON DELETE SET NULL);",
-            "CREATE TABLE IF NOT EXISTS Lines (line_id INTEGER PRIMARY KEY, scene_id INTEGER NOT NULL, speaker_id INTEGER NOT NULL, sequence INTEGER NOT NULL, content TEXT NOT NULL, sprite_id INTEGER, expression_id INTEGER, choice_id INTEGER, FOREIGN KEY (scene_id) REFERENCES Scenes (scene_id) ON DELETE CASCADE, FOREIGN KEY (speaker_id) REFERENCES Characters (char_id) ON DELETE CASCADE, FOREIGN KEY (sprite_id) REFERENCES Sprites (sprite_id) ON DELETE SET NULL);"
+            "CREATE TABLE IF NOT EXISTS Lines (line_id INTEGER PRIMARY KEY, scene_id INTEGER NOT NULL, speaker_id INTEGER NOT NULL, sequence INTEGER NOT NULL, content TEXT NOT NULL, sprite_id INTEGER, expression_id INTEGER, choice_id INTEGER, FOREIGN KEY (scene_id) REFERENCES Scenes (scene_id) ON DELETE CASCADE, FOREIGN KEY (speaker_id) REFERENCES Characters (char_id) ON DELETE CASCADE, FOREIGN KEY (sprite_id) REFERENCES Sprites (sprite_id) ON DELETE SET NULL);",
+
+            """
+            CREATE TABLE IF NOT EXISTS EventLogic (
+                logic_id     INTEGER PRIMARY KEY,
+                start_scene  INTEGER NOT NULL,
+                end_scene    INTEGER NOT NULL,
+                event_id     INTEGER NOT NULL,
+                FOREIGN KEY (start_scene) REFERENCES Scenes(scene_id) ON DELETE CASCADE,
+                FOREIGN KEY (end_scene)   REFERENCES Scenes(scene_id) ON DELETE CASCADE,
+                FOREIGN KEY (event_id)    REFERENCES Events(event_id) ON DELETE CASCADE
+            );
+            """
+        
+        
         ]
         try:
             cursor = conn.cursor()
