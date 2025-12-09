@@ -371,16 +371,29 @@ def sprites_content():
     refresh()
 
 def events_content():
+    # --- Event flags table ---
     events_table = None
+
+    # --- Event logic UI elements ---
     logic_table = None
     start_scene_select = None
     end_scene_select = None
     logic_event_select = None
 
-    def refresh_events(): events_table.rows = CRUD_MANAGER.get_all_events()
-    def add_event(name):
-        if name: CRUD_MANAGER.create_event(name); refresh_events(); refresh_logic()
-    def delete_event(row): CRUD_MANAGER.delete_event(row['event_id']); refresh_events(); refresh_logic()
+    # ==== EVENT FLAGS HELPERS ====
+    def refresh_events():
+        events_table.rows = CRUD_MANAGER.get_all_events()
+
+    def add_event(name: str):
+        if name:
+            CRUD_MANAGER.create_event(name)
+            refresh_events()
+            refresh_logic() 
+
+    def delete_event(row):
+        CRUD_MANAGER.delete_event(row['event_id'])
+        refresh_events()
+        refresh_logic()
     
     def edit_event(row):
         with ui.dialog() as dialog, ui.card():
@@ -392,6 +405,7 @@ def events_content():
             ui.button("Save", on_click=save)
         dialog.open()
 
+    # ==== EVENT LOGIC HELPERS ====
     def refresh_logic():
         scenes = CRUD_MANAGER.get_all_scenes_joined()
         scene_opts = {s['scene_id']: s['scene_name'] for s in scenes}
@@ -400,20 +414,30 @@ def events_content():
         events = CRUD_MANAGER.get_all_events()
         event_opts = {e['event_id']: e['name'] for e in events}
         logic_event_select.set_options(event_opts)
+        
         if start_scene_select.value:
             logic_table.rows = CRUD_MANAGER.get_event_logic_for_scene(start_scene_select.value)
-        else: logic_table.rows = []
+        else:
+            logic_table.rows = []
 
     def on_start_scene_change(e):
-        if e.value: logic_table.rows = CRUD_MANAGER.get_event_logic_for_scene(e.value)
-        else: logic_table.rows = []
+        val = e.value
+        if val:
+            logic_table.rows = CRUD_MANAGER.get_event_logic_for_scene(val)
+        else:
+            logic_table.rows = []
 
     def add_logic_rule():
-        if not start_scene_select.value or not end_scene_select.value or not logic_event_select.value: return ui.notify("Missing info", color='red')
+        if not start_scene_select.value or not end_scene_select.value or not logic_event_select.value:
+            return ui.notify("Missing Start Scene, End Scene, or Event", color='red')
         CRUD_MANAGER.create_event_logic(int(start_scene_select.value), int(end_scene_select.value), int(logic_event_select.value))
+        ui.notify("Event logic rule added", color='green')
         refresh_logic()
 
-    def delete_logic_rule(row): CRUD_MANAGER.delete_event_logic(row['logic_id']); refresh_logic()
+    def delete_logic_rule(row):
+        CRUD_MANAGER.delete_event_logic(row['logic_id'])
+        ui.notify("Event logic rule deleted", color='orange')
+        refresh_logic()
     
     def edit_logic_rule(row):
         scenes = CRUD_MANAGER.get_all_scenes_joined()
@@ -422,6 +446,7 @@ def events_content():
         e_opts = {e['event_id']: e['name'] for e in events}
         with ui.dialog() as dialog, ui.card():
             ui.label("Edit Logic Rule").classes("text-lg font-bold")
+            # Defaults
             ss = ui.select(s_opts, label="Start", value=row['start_scene'])
             es = ui.select(s_opts, label="End", value=row['end_scene'])
             ev = ui.select(e_opts, label="Event", value=row['event_id'])
@@ -431,16 +456,25 @@ def events_content():
             ui.button("Save", on_click=save)
         dialog.open()
 
+    # ================== UI LAYOUT ==================
     with ui.column().classes("w-full gap-8"):
+        # ---- TOP ROW: EVENT FLAGS ----
         with ui.row().classes("w-full gap-8"):
             with ui.card().classes("w-1/3"):
                 ui.label("Add Event Flag").classes("text-xl font-bold")
-                n = ui.input("Name").classes("w-full")
+                n = ui.input("Event Name (e.g. 'Met Maya')").classes("w-full")
                 ui.button("Add", on_click=lambda: add_event(n.value)).classes("mt-4 w-full")
             with ui.card().classes("w-2/3"):
                 events_table = ui.table(
-                    columns=[{'name':'name','label':'Name','field':'name'}, {'name':'obtained_bool','label':'Active?','field':'obtained_bool'}, {'name':'actions','label':'','field':'actions'}],
-                    rows=[], row_key='event_id').classes('w-full')
+                    columns=[
+                        {'name':'event_id','label':'ID','field':'event_id'},
+                        {'name':'name','label':'Name','field':'name'},
+                        {'name':'obtained_bool','label':'Active?','field':'obtained_bool'},
+                        {'name':'actions','label':'','field':'actions'},
+                    ],
+                    rows=[],
+                    row_key='event_id',
+                ).classes('w-full')
                 events_table.add_slot('body-cell-actions', r'''
                     <q-td :props="props">
                         <q-btn icon="edit" color="primary" flat dense @click="$parent.$emit('edit', props.row)" />
@@ -449,14 +483,20 @@ def events_content():
                 events_table.on('del', lambda e: delete_event(e.args))
                 events_table.on('edit', lambda e: edit_event(e.args))
 
+        # ---- SECOND ROW: EVENT LOGIC EDITOR ----
         with ui.row().classes("w-full gap-8"):
+            # Left card: editor
             with ui.card().classes("w-1/3"):
-                ui.label("Event Logic (Many-to-Many)").classes("text-xl font-bold mb-2")
+                ui.label("Event Logic (Route Conditions)").classes("text-xl font-bold mb-2")
+                ui.label("If ALL rules for a Start Scene have obtained events, jump to End Scene.").classes("text-sm text-gray-600 mb-4")
                 start_scene_select = ui.select({}, label="Start Scene", on_change=on_start_scene_change).classes("w-full mb-2")
-                end_scene_select = ui.select({}, label="End Scene (if events true)").classes("w-full mb-2")
+                end_scene_select = ui.select({}, label="End Scene (if all events true)").classes("w-full mb-2")
                 logic_event_select = ui.select({}, label="Required Event").classes("w-full mb-4")
                 ui.button("Add Logic Rule", on_click=add_logic_rule).classes("w-full bg-indigo-600 text-white")
+
+            # Right card: logic table
             with ui.card().classes("w-2/3"):
+                ui.label("Logic Rules for Selected Start Scene").classes("text-lg font-bold mb-2")
                 logic_table = ui.table(
                     columns=[
                         {'name': 'logic_id',    'label': 'ID',        'field': 'logic_id'},
