@@ -94,18 +94,30 @@ class CRUDManager:
     def delete_location(self, location_id: int) -> bool:
         return bool(self._execute_query("DELETE FROM Locations WHERE location_id = ?", (location_id,), commit=True))
 
-    def create_scene(self, name: str, location_id: int) -> Optional[int]:
-        return self._execute_query("INSERT INTO Scenes (name, location_id) VALUES (?, ?)", (name, location_id), commit=True)
-    def update_scene(self, scene_id: int, name: str, location_id: int) -> bool:
-        return bool(self._execute_query("UPDATE Scenes SET name=?, location_id=? WHERE scene_id=?", (name, location_id, scene_id), commit=True))
+    # --- Scenes (Updated for Default Next Scene) ---
+    def create_scene(self, name: str, location_id: int, next_scene_default: Optional[int] = None) -> Optional[int]:
+        return self._execute_query("INSERT INTO Scenes (name, location_id, next_scene_default) VALUES (?, ?, ?)", (name, location_id, next_scene_default), commit=True)
+    
+    def update_scene(self, scene_id: int, name: str, location_id: int, next_scene_default: Optional[int]) -> bool:
+        return bool(self._execute_query("UPDATE Scenes SET name=?, location_id=?, next_scene_default=? WHERE scene_id=?", (name, location_id, next_scene_default, scene_id), commit=True))
+    
     def get_all_scenes_joined(self) -> List[Dict]:
-        sql = """SELECT S.scene_id, S.name as scene_name, L.name as location_name, S.location_id 
-                 FROM Scenes S LEFT JOIN Locations L ON S.location_id = L.location_id ORDER BY S.scene_id DESC"""
+        # Self-join to get the name of the next scene if it exists
+        sql = """
+        SELECT S.scene_id, S.name as scene_name, L.name as location_name, S.location_id, 
+               S.next_scene_default, S2.name as next_scene_name
+        FROM Scenes S 
+        LEFT JOIN Locations L ON S.location_id = L.location_id 
+        LEFT JOIN Scenes S2 ON S.next_scene_default = S2.scene_id
+        ORDER BY S.scene_id DESC
+        """
         return self._execute_query(sql, fetch_all=True) or []
+    
     def get_scene_details(self, scene_id: int) -> Dict:
-        sql = """SELECT S.scene_id, S.name, L.bg_path FROM Scenes S 
+        sql = """SELECT S.scene_id, S.name, L.bg_path, S.next_scene_default FROM Scenes S 
                  LEFT JOIN Locations L ON S.location_id = L.location_id WHERE S.scene_id = ?"""
         return self._execute_query(sql, (scene_id,), fetch_one=True)
+    
     def delete_scene(self, scene_id: int) -> bool:
         return bool(self._execute_query("DELETE FROM Scenes WHERE scene_id = ?", (scene_id,), commit=True))
 
@@ -422,11 +434,11 @@ def events_content():
         e_opts = {e['event_id']: e['name'] for e in events}
         with ui.dialog() as dialog, ui.card():
             ui.label("Edit Logic Rule").classes("text-lg font-bold")
-            ss = ui.select(s_opts, label="Start", value=row['start_scene'])
-            es = ui.select(s_opts, label="End", value=row['end_scene'])
+            ss = ui.select(s_opts, label="Start Scene", value=row['start_scene'])
+            es = ui.select(s_opts, label="End Scene", value=row['end_scene'])
             ev = ui.select(e_opts, label="Event", value=row['event_id'])
             def save():
-                CRUD_MANAGER.update_event_logic(row['logic_id'], ss.value, es.value, ev.value)
+                CRUD_MANAGER.update_event_logic(row['logic_id'], int(ss.value), int(es.value), int(ev.value))
                 dialog.close(); refresh_logic(); ui.notify("Updated")
             ui.button("Save", on_click=save)
         dialog.open()
@@ -624,24 +636,54 @@ def editor_content():
     refresh_data()
 
 def scenes_page_content():
-    table, name_input, loc_select = None, None, None
+    table, name_input, loc_select, next_scene_select = None, None, None, None
     def refresh():
+        # Get scenes for table
         table.rows = CRUD_MANAGER.get_all_scenes_joined()
+        # Get options for Create Scene form
         locs = CRUD_MANAGER.get_all_locations()
         loc_select.set_options({l['location_id']: l['name'] for l in locs})
+        
+        # Get options for Next Scene dropdown
+        all_scenes = CRUD_MANAGER.get_all_scenes_joined()
+        ns_opts = {0: 'None'}
+        ns_opts.update({s['scene_id']: s['scene_name'] for s in all_scenes})
+        next_scene_select.set_options(ns_opts)
+        next_scene_select.value = 0
+
     def add():
-        if name_input.value and loc_select.value: CRUD_MANAGER.create_scene(name_input.value, loc_select.value); refresh()
+        if not name_input.value or not loc_select.value:
+            return ui.notify("Missing info", color='red')
+        
+        # Handle next scene input
+        ns_val = next_scene_select.value if next_scene_select.value != 0 else None
+        
+        CRUD_MANAGER.create_scene(name_input.value, loc_select.value, ns_val)
+        refresh()
+
     def delete(row): CRUD_MANAGER.delete_scene(row['scene_id']); refresh()
     
     def edit(row):
         locs = CRUD_MANAGER.get_all_locations()
         l_opts = {l['location_id']: l['name'] for l in locs}
+        
+        # Get scene options for editing
+        all_scenes = CRUD_MANAGER.get_all_scenes_joined()
+        ns_opts = {0: 'None'}
+        ns_opts.update({s['scene_id']: s['scene_name'] for s in all_scenes})
+        
         with ui.dialog() as dialog, ui.card():
             ui.label("Edit Scene").classes("text-lg font-bold")
             t = ui.input("Title", value=row['scene_name'])
             l = ui.select(l_opts, label="Location", value=row['location_id'])
+            
+            # Use 'next_scene_default' from the row data
+            current_next = row.get('next_scene_default')
+            ns = ui.select(ns_opts, label="Next Scene (Default)", value=(current_next if current_next else 0))
+            
             def save():
-                CRUD_MANAGER.update_scene(row['scene_id'], t.value, l.value)
+                new_next = ns.value if ns.value != 0 else None
+                CRUD_MANAGER.update_scene(row['scene_id'], t.value, l.value, new_next)
                 dialog.close(); refresh(); ui.notify("Updated")
             ui.button("Save", on_click=save)
         dialog.open()
@@ -651,9 +693,16 @@ def scenes_page_content():
             ui.label("Create Scene").classes("text-xl font-bold")
             name_input = ui.input("Title")
             loc_select = ui.select({}, label="Default BG").classes("w-full")
+            next_scene_select = ui.select({}, label="Next Scene (Default)").classes("w-full")
             ui.button("Create", on_click=add).classes("mt-4 w-full")
         with ui.card().classes("w-2/3"):
-            table = ui.table(columns=[{'name':'scene_id','label':'ID','field':'scene_id'}, {'name':'scene_name','label':'Title','field':'scene_name'}, {'name':'location_name','label':'Loc','field':'location_name'}, {'name':'act','label':'','field':'act'}], rows=[], row_key='scene_id').classes('w-full')
+            table = ui.table(columns=[
+                {'name':'scene_id','label':'ID','field':'scene_id'}, 
+                {'name':'scene_name','label':'Title','field':'scene_name'}, 
+                {'name':'location_name','label':'Loc','field':'location_name'}, 
+                {'name':'next_scene_name','label':'Next Scene','field':'next_scene_name'},
+                {'name':'act','label':'','field':'act'}
+            ], rows=[], row_key='scene_id').classes('w-full')
             table.add_slot('body-cell-act', r'''<q-td :props="props">
                 <q-btn icon="edit" color="primary" flat dense @click="$parent.$emit('edit', props.row)"/>
                 <q-btn icon="delete" color="negative" flat dense @click="$parent.$emit('del', props.row)"/>
