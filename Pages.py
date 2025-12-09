@@ -457,7 +457,19 @@ def events_content():
                 logic_event_select = ui.select({}, label="Required Event").classes("w-full mb-4")
                 ui.button("Add Logic Rule", on_click=add_logic_rule).classes("w-full bg-indigo-600 text-white")
             with ui.card().classes("w-2/3"):
-                logic_table = ui.table(columns=[{'name':'logic_id','label':'ID','field':'logic_id'},{'name':'event_name','label':'Event','field':'event_name'},{'name':'actions','label':'','field':'actions'}], rows=[], row_key='logic_id').classes("w-full")
+                logic_table = ui.table(
+                    columns=[
+                        {'name': 'logic_id',    'label': 'ID',        'field': 'logic_id'},
+                        {'name': 'start_scene', 'label': 'Start ID',  'field': 'start_scene'},
+                        {'name': 'end_scene',   'label': 'End ID',    'field': 'end_scene'},
+                        {'name': 'event_id',    'label': 'Event ID',  'field': 'event_id'},
+                        {'name': 'event_name',  'label': 'Event',     'field': 'event_name'},
+                        {'name': 'obtained_bool','label':'Obtained?','field':'obtained_bool'},
+                        {'name': 'actions',     'label': '',         'field': 'actions'},
+                    ],
+                    rows=[],
+                    row_key='logic_id',
+                ).classes("w-full")
                 logic_table.add_slot('body-cell-actions', r'''
                     <q-td :props="props">
                         <q-btn icon="edit" color="primary" flat dense size="sm" @click="$parent.$emit('edit', props.row)" />
