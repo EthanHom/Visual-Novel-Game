@@ -214,7 +214,6 @@
 #             print(f"Saved BG to: {save_path}")
 
 #             # 2. Save Path to DB (Relative for URL)
-#             # IMPORTANT: We store 'assets/bgs/...' 
 #             db_path = f"assets/bgs/{fname}"
 #             CRUD_MANAGER.create_location(name, db_path)
             
@@ -415,7 +414,7 @@
 #             table.add_slot('body-cell-act', r'''<q-td :props="props"><q-btn icon="delete" color="negative" flat dense @click="$parent.$emit('del', props.row)"/></q-td>''')
 #             table.on('del', lambda e: delete(e.args)); refresh()
 
-# # --- 4. GAME PLAYER LOGIC (FIXED NESTING & Z-INDEX) ---
+# # --- 4. GAME PLAYER LOGIC (FIXED LAYERING & NESTING) ---
 
 # def player_content():
 #     class GameState:
@@ -427,24 +426,28 @@
 
 #     state = GameState()
     
-#     # 1. Background Layer (Lowest Z-Index)
-#     bg_image = ui.image().classes("absolute top-0 left-0 w-full h-full object-cover z-0")
+#     # --- LAYER 1: BACKGROUND (Bottom) ---
+#     # absolute, full screen, z-index 0
+#     bg_image = ui.image().classes("absolute top-0 left-0 w-full h-full object-cover").style("z-index: 0;")
     
-#     # 2. Sprite Layer
-#     sprite_container = ui.element('div').classes("absolute bottom-0 left-1/2 transform -translate-x-1/2 h-4/5 z-10")
-#     sprite_image = ui.image().classes("h-full object-contain").style("display: none")
-#     sprite_image.move(sprite_container)
+#     # --- LAYER 2: SPRITE (Middle) ---
+#     # absolute, bottom center, z-index 10
+#     sprite_container = ui.element('div').classes("absolute bottom-0 left-1/2 transform -translate-x-1/2 h-4/5 w-1/2 flex justify-center items-end pointer-events-none").style("z-index: 10;")
+#     with sprite_container:
+#         sprite_image = ui.image().classes("h-full object-contain").style("display: none;")
     
-#     # 3. Dialogue Layer (Highest Z-Index)
-#     # FIX: Use 'with' to nest content INSIDE the card
-#     dialogue_card = ui.card().classes("absolute bottom-8 left-1/2 transform -translate-x-1/2 w-3/4 bg-gray-900/90 text-white p-6 border-2 border-gray-600 rounded-xl z-20")
+#     # --- LAYER 3: UI / TEXT (Top) ---
+#     # absolute, bottom, z-index 20
+#     dialogue_card = ui.card().classes("absolute bottom-8 left-1/2 transform -translate-x-1/2 w-3/4 bg-gray-900/90 text-white p-6 border-2 border-gray-600 rounded-xl").style("z-index: 20;")
     
+#     # NESTING FIX: Put labels INSIDE the card
 #     with dialogue_card:
 #         name_label = ui.label("").classes("text-xl font-bold text-yellow-400 mb-2")
 #         text_label = ui.label("").classes("text-lg leading-relaxed")
     
-#     next_btn = ui.button("Next >", on_click=lambda: advance()).classes("absolute bottom-8 right-16 z-30")
-#     choice_container = ui.column().classes("absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 gap-4 z-40")
+#     # Navigation Buttons (Z-Index 30)
+#     next_btn = ui.button("Next >", on_click=lambda: advance()).classes("absolute bottom-8 right-16").style("z-index: 30;")
+#     choice_container = ui.column().classes("absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 gap-4").style("z-index: 40;")
 
 #     def load_scene(scene_id):
 #         details = CRUD_MANAGER.get_scene_details(scene_id)
@@ -454,7 +457,7 @@
         
 #         state.scene_id = scene_id
         
-#         # PATH FIX: Ensure leading slash
+#         # Background Path Logic
 #         db_path = details['bg_path']
 #         if db_path:
 #             clean_path = db_path.replace('\\', '/')
@@ -500,13 +503,13 @@
 
 #         line = state.lines[state.line_idx]
         
-#         # UI Updates
+#         # Update Text
 #         name_label.text = line['char_name']
 #         name_label.style(f"color: #{line['text_color']}")
 #         text_label.text = line['content']
 #         dialogue_card.visible = True
 
-#         # Sprite Path Fix
+#         # Update Sprite
 #         if line['sprite_path']:
 #             s_path = line['sprite_path']
 #             clean_path = s_path.replace('\\', '/')
@@ -519,6 +522,7 @@
 #         else:
 #             sprite_image.style("display: none")
 
+#         # Show Choices or Next Button
 #         if line['choice_id']:
 #             next_btn.visible = False
 #             show_choices(line['choice_id'])
@@ -573,7 +577,8 @@
 # @ui.page('/play')
 # async def player_page():
 #     # Remove 'bg-black' to allow images to be seen underneath
-#     with ui.column().classes('w-full h-screen relative overflow-hidden bg-black'):
+#     with ui.column().classes('w-full h-screen relative overflow-hidden'):
+#         # Backward compatible redirect
 #         ui.button(icon='close', on_click=lambda: ui.run_javascript('window.location.href="/editor"')).classes('absolute top-4 right-4 z-50 bg-red-600 text-white rounded-full')
 #         player_content()
 
@@ -608,6 +613,7 @@
 
 # if __name__ in {"__main__", "__mp_main__"}:
 #     init_db()
+#     # Reload=False avoids file locking issues with assets
 #     ui.run(title="VN Engine", port=8080, reload=False)
 
 
@@ -634,7 +640,6 @@ ASSETS_DIR.mkdir(parents=True, exist_ok=True)
 (ASSETS_DIR / 'sprites').mkdir(parents=True, exist_ok=True)
 
 # *** CRITICAL: Serve assets folder to browser ***
-# Browser URL '/assets/...' maps to File System '.../assets/...'
 app.add_static_files('/assets', str(ASSETS_DIR))
 print(f"--- SYSTEM READY ---")
 print(f"Database: {DATABASE_FILE}")
@@ -757,8 +762,15 @@ class CRUDManager:
                  ORDER BY C.choice_id"""
         return self._execute_query(sql, fetch_all=True) or []
     
+    # *** FIX: JOIN EVENTS TABLE SO 'event_name' IS AVAILABLE ***
     def get_choices_by_group(self, group_id: int) -> List[Dict]:
-        return self._execute_query("SELECT * FROM Choices WHERE choice_id = ?", (group_id,), fetch_all=True) or []
+        sql = """
+        SELECT C.*, E.name as event_name 
+        FROM Choices C 
+        LEFT JOIN Events E ON C.event_id = E.event_id 
+        WHERE C.choice_id = ?
+        """
+        return self._execute_query(sql, (group_id,), fetch_all=True) or []
 
     def delete_choice_option(self, decision_id: int) -> bool:
         return bool(self._execute_query("DELETE FROM Choices WHERE decision_id = ?", (decision_id,), commit=True))
@@ -1092,6 +1104,7 @@ def player_content():
     def handle_choice(choice):
         if choice['event_id']:
             CRUD_MANAGER.update_event_status(choice['event_id'], True)
+            # FIX: 'event_name' is now available thanks to the join
             ui.notify(f"Event Triggered: {choice['event_name']}")
         
         if choice['next_scene']:
