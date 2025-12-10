@@ -94,7 +94,6 @@ class CRUDManager:
     def delete_location(self, location_id: int) -> bool:
         return bool(self._execute_query("DELETE FROM Locations WHERE location_id = ?", (location_id,), commit=True))
 
-    # --- Scenes (Updated for Default Next Scene) ---
     def create_scene(self, name: str, location_id: int, next_scene_default: Optional[int] = None) -> Optional[int]:
         return self._execute_query("INSERT INTO Scenes (name, location_id, next_scene_default) VALUES (?, ?, ?)", (name, location_id, next_scene_default), commit=True)
     
@@ -102,22 +101,14 @@ class CRUDManager:
         return bool(self._execute_query("UPDATE Scenes SET name=?, location_id=?, next_scene_default=? WHERE scene_id=?", (name, location_id, next_scene_default, scene_id), commit=True))
     
     def get_all_scenes_joined(self) -> List[Dict]:
-        # Self-join to get the name of the next scene if it exists
-        sql = """
-        SELECT S.scene_id, S.name as scene_name, L.name as location_name, S.location_id, 
-               S.next_scene_default, S2.name as next_scene_name
-        FROM Scenes S 
-        LEFT JOIN Locations L ON S.location_id = L.location_id 
-        LEFT JOIN Scenes S2 ON S.next_scene_default = S2.scene_id
-        ORDER BY S.scene_id DESC
-        """
+        sql = """SELECT S.scene_id, S.name as scene_name, L.name as location_name, S.location_id, S.next_scene_default, S2.name as next_scene_name
+                 FROM Scenes S LEFT JOIN Locations L ON S.location_id = L.location_id LEFT JOIN Scenes S2 ON S.next_scene_default = S2.scene_id ORDER BY S.scene_id DESC"""
         return self._execute_query(sql, fetch_all=True) or []
     
     def get_scene_details(self, scene_id: int) -> Dict:
         sql = """SELECT S.scene_id, S.name, L.bg_path, S.next_scene_default FROM Scenes S 
                  LEFT JOIN Locations L ON S.location_id = L.location_id WHERE S.scene_id = ?"""
         return self._execute_query(sql, (scene_id,), fetch_one=True)
-    
     def delete_scene(self, scene_id: int) -> bool:
         return bool(self._execute_query("DELETE FROM Scenes WHERE scene_id = ?", (scene_id,), commit=True))
 
@@ -140,8 +131,11 @@ class CRUDManager:
     # --- Events ---
     def create_event(self, name: str) -> Optional[int]:
         return self._execute_query("INSERT INTO Events (name, obtained_bool) VALUES (?, 0)", (name,), commit=True)
-    def update_event_name(self, event_id: int, name: str) -> bool:
-        return bool(self._execute_query("UPDATE Events SET name=? WHERE event_id=?", (name, event_id), commit=True))
+    
+    # NEW: Full Update for Events (Name + Bool)
+    def update_event_full(self, event_id: int, name: str, obtained_bool: bool) -> bool:
+        return bool(self._execute_query("UPDATE Events SET name=?, obtained_bool=? WHERE event_id=?", (name, obtained_bool, event_id), commit=True))
+    
     def get_all_events(self) -> List[Dict]:
         return self._execute_query("SELECT * FROM Events", fetch_all=True) or []
     def delete_event(self, event_id: int) -> bool:
@@ -394,12 +388,16 @@ def events_content():
         if name: CRUD_MANAGER.create_event(name); refresh_events(); refresh_logic()
     def delete_event(row): CRUD_MANAGER.delete_event(row['event_id']); refresh_events(); refresh_logic()
     
+    # *** UPDATED: Edit Event Name AND Boolean Status ***
     def edit_event(row):
         with ui.dialog() as dialog, ui.card():
             ui.label("Edit Event").classes("text-lg font-bold")
             n = ui.input("Name", value=row['name'])
+            # Checkbox for status
+            b = ui.checkbox("Active (Obtained)?", value=bool(row['obtained_bool']))
+            
             def save():
-                CRUD_MANAGER.update_event_name(row['event_id'], n.value)
+                CRUD_MANAGER.update_event_full(row['event_id'], n.value, b.value)
                 dialog.close(); refresh_events(); refresh_logic(); ui.notify("Updated")
             ui.button("Save", on_click=save)
         dialog.open()
@@ -758,11 +756,19 @@ def player_content():
         advance()
 
     def handle_choice(choice):
+        # *** FIX: CLEAR BUTTONS IMMEDIATELY ***
+        choice_container.clear()
+        
         if choice['event_id']:
             CRUD_MANAGER.update_event_status(choice['event_id'], True)
             ui.notify(f"Event Triggered: {choice['event_name']}")
+        
         if choice['next_scene']:
-            choice_container.clear(); dialogue_card.visible = True; load_scene(choice['next_scene'])
+            dialogue_card.visible = True
+            load_scene(choice['next_scene'])
+        else:
+            # If no next scene, just show the next button again to continue flow
+            next_btn.visible = True
 
     def show_choices(group_id):
         next_btn.visible = False
