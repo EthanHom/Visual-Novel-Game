@@ -101,21 +101,14 @@ class CRUDManager:
         return bool(self._execute_query("UPDATE Scenes SET name=?, location_id=?, next_scene_default=? WHERE scene_id=?", (name, location_id, next_scene_default, scene_id), commit=True))
     
     def get_all_scenes_joined(self) -> List[Dict]:
-        sql = """
-        SELECT S.scene_id, S.name as scene_name, L.name as location_name, S.location_id, 
-               S.next_scene_default, S2.name as next_scene_name
-        FROM Scenes S 
-        LEFT JOIN Locations L ON S.location_id = L.location_id 
-        LEFT JOIN Scenes S2 ON S.next_scene_default = S2.scene_id
-        ORDER BY S.scene_id DESC
-        """
+        sql = """SELECT S.scene_id, S.name as scene_name, L.name as location_name, S.location_id, S.next_scene_default, S2.name as next_scene_name
+                 FROM Scenes S LEFT JOIN Locations L ON S.location_id = L.location_id LEFT JOIN Scenes S2 ON S.next_scene_default = S2.scene_id ORDER BY S.scene_id DESC"""
         return self._execute_query(sql, fetch_all=True) or []
     
     def get_scene_details(self, scene_id: int) -> Dict:
         sql = """SELECT S.scene_id, S.name, L.bg_path, S.next_scene_default FROM Scenes S 
                  LEFT JOIN Locations L ON S.location_id = L.location_id WHERE S.scene_id = ?"""
         return self._execute_query(sql, (scene_id,), fetch_one=True)
-    
     def delete_scene(self, scene_id: int) -> bool:
         return bool(self._execute_query("DELETE FROM Scenes WHERE scene_id = ?", (scene_id,), commit=True))
 
@@ -139,8 +132,8 @@ class CRUDManager:
     def create_event(self, name: str) -> Optional[int]:
         return self._execute_query("INSERT INTO Events (name, obtained_bool) VALUES (?, 0)", (name,), commit=True)
     
-    # Updated: Handles Name and Boolean Status
-    def update_event_full(self, event_id: int, name: str, obtained_bool: int) -> bool:
+    # NEW: Full Update for Events (Name + Bool)
+    def update_event_full(self, event_id: int, name: str, obtained_bool: bool) -> bool:
         return bool(self._execute_query("UPDATE Events SET name=?, obtained_bool=? WHERE event_id=?", (name, obtained_bool, event_id), commit=True))
     
     def get_all_events(self) -> List[Dict]:
@@ -395,19 +388,16 @@ def events_content():
         if name: CRUD_MANAGER.create_event(name); refresh_events(); refresh_logic()
     def delete_event(row): CRUD_MANAGER.delete_event(row['event_id']); refresh_events(); refresh_logic()
     
-    # *** FIX: Edit Event Name + Active Status ***
+    # *** UPDATED: Edit Event Name AND Boolean Status ***
     def edit_event(row):
         with ui.dialog() as dialog, ui.card():
             ui.label("Edit Event").classes("text-lg font-bold")
             n = ui.input("Name", value=row['name'])
-            # Cast 0/1 to boolean for the checkbox
-            is_active = bool(row['obtained_bool'])
-            b = ui.checkbox("Active (Obtained)?", value=is_active)
+            # Checkbox for status
+            b = ui.checkbox("Active (Obtained)?", value=bool(row['obtained_bool']))
             
             def save():
-                # Cast boolean back to 1 or 0 for SQLite
-                val = 1 if b.value else 0
-                CRUD_MANAGER.update_event_full(row['event_id'], n.value, val)
+                CRUD_MANAGER.update_event_full(row['event_id'], n.value, b.value)
                 dialog.close(); refresh_events(); refresh_logic(); ui.notify("Updated")
             ui.button("Save", on_click=save)
         dialog.open()
@@ -440,14 +430,11 @@ def events_content():
         s_opts = {s['scene_id']: s['scene_name'] for s in scenes}
         events = CRUD_MANAGER.get_all_events()
         e_opts = {e['event_id']: e['name'] for e in events}
-        
         with ui.dialog() as dialog, ui.card():
             ui.label("Edit Logic Rule").classes("text-lg font-bold")
-            # Prefill existing values
             ss = ui.select(s_opts, label="Start Scene", value=row['start_scene'])
             es = ui.select(s_opts, label="End Scene", value=row['end_scene'])
             ev = ui.select(e_opts, label="Event", value=row['event_id'])
-            
             def save():
                 CRUD_MANAGER.update_event_logic(row['logic_id'], int(ss.value), int(es.value), int(ev.value))
                 dialog.close(); refresh_logic(); ui.notify("Updated")
@@ -738,82 +725,129 @@ def player_content():
     bg_image = ui.image().classes("absolute top-0 left-0 w-full h-full object-cover").style("z-index: 0;")
     
     # --- LAYER 2: SPRITE (Middle) ---
-    sprite_container = ui.element('div').classes("absolute bottom-0 left-1/2 transform -translate-x-1/2 h-4/5 w-1/2 flex justify-center items-end pointer-events-none").style("z-index: 10;")
+    sprite_container = ui.element('div').classes(
+        "absolute bottom-0 left-1/2 transform -translate-x-1/2 "
+        "h-4/5 w-1/2 flex justify-center items-end pointer-events-none"
+    ).style("z-index: 10;")
     with sprite_container:
         sprite_image = ui.image().classes("h-full object-contain").style("display: none;")
     
     # --- LAYER 3: UI / TEXT (Top) ---
-    dialogue_card = ui.card().classes("absolute bottom-8 left-1/2 transform -translate-x-1/2 w-3/4 bg-gray-900/90 text-white p-6 border-2 border-gray-600 rounded-xl").style("z-index: 20;")
+    dialogue_card = ui.card().classes(
+        "absolute bottom-8 left-1/2 transform -translate-x-1/2 "
+        "w-3/4 bg-gray-900/90 text-white p-6 border-2 border-gray-600 rounded-xl"
+    ).style("z-index: 20;")
     
     with dialogue_card:
         name_label = ui.label("").classes("text-xl font-bold text-yellow-400 mb-2")
         text_label = ui.label("").classes("text-lg leading-relaxed")
     
-    next_btn = ui.button("Next >", on_click=lambda: advance()).classes("absolute bottom-8 right-16").style("z-index: 30;")
-    choice_container = ui.column().classes("absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 gap-4").style("z-index: 40;")
+    next_btn = ui.button("Next >", on_click=lambda: advance()).classes(
+        "absolute bottom-8 right-16"
+    ).style("z-index: 30;")
+    
+    choice_container = ui.column().classes(
+        "absolute top-1/2 left-1/2 transform -translate-x-1/2 "
+        "-translate-y-1/2 gap-4"
+    ).style("z-index: 40;")
+    choice_container.visible = False   # start hidden
+
+    # --- helper to truly clear choices ---
+    def clear_choices():
+        choice_container.clear()
+        choice_container.visible = False
 
     def load_scene(scene_id):
+        clear_choices()  # wipe any old choices when loading a new scene
+
         details = CRUD_MANAGER.get_scene_details(scene_id)
-        if not details: return ui.notify("Scene not found / End of Game", color='red')
+        if not details:
+            return ui.notify("Scene not found / End of Game", color='red')
+
         state.scene_id = scene_id
         db_path = details['bg_path']
+
         if db_path:
             clean_path = db_path.replace('\\', '/')
-            if not clean_path.startswith('/'): clean_path = '/' + clean_path
+            if not clean_path.startswith('/'):
+                clean_path = '/' + clean_path
             print(f"LOADING BG: {clean_path}") 
             state.bg_path = clean_path
             bg_image.source = state.bg_path
-        else: bg_image.source = None
+        else:
+            bg_image.source = None
+
         state.lines = CRUD_MANAGER.get_lines_for_scene(scene_id)
         state.line_idx = -1
         advance()
 
     def handle_choice(choice):
-        # *** FIX: CLEAR BUTTONS IMMEDIATELY ***
-        choice_container.clear()
-        
+        clear_choices()  # immediately remove buttons
+
         if choice['event_id']:
             CRUD_MANAGER.update_event_status(choice['event_id'], True)
             ui.notify(f"Event Triggered: {choice['event_name']}")
-        
+
         if choice['next_scene']:
             dialogue_card.visible = True
             load_scene(choice['next_scene'])
         else:
-            # If no next scene, just show the next button again to continue flow
+            # If no next scene, just show the next button again
             next_btn.visible = True
 
     def show_choices(group_id):
         next_btn.visible = False
         choices = CRUD_MANAGER.get_choices_by_group(group_id)
-        choice_container.clear()
-        for c in choices:
-            def make_handler(clicked_choice): return lambda: handle_choice(clicked_choice)
-            ui.button(c['decision_text'], on_click=make_handler(c)).classes("w-64 h-12 text-lg bg-indigo-600 hover:bg-indigo-500 border border-white shadow-xl")
+        clear_choices()
+        choice_container.visible = True
+
+        # 🔥 IMPORTANT: create buttons as children of choice_container
+        with choice_container:
+            for c in choices:
+                def make_handler(clicked_choice):
+                    return lambda: handle_choice(clicked_choice)
+                ui.button(
+                    c['decision_text'],
+                    on_click=make_handler(c),
+                ).classes(
+                    "w-64 h-12 text-lg bg-indigo-600 hover:bg-indigo-500 "
+                    "border border-white shadow-xl"
+                )
 
     def advance():
+        # every time we advance, assume old choices should be gone
+        clear_choices()
+        next_btn.visible = True
+
         state.line_idx += 1
         if state.line_idx >= len(state.lines):
             next_scene = CRUD_MANAGER.get_next_scene_with_event_logic(state.scene_id)
             if next_scene:
                 ui.notify(f"Jumping to scene {next_scene}", color='green')
-                choice_container.clear(); load_scene(next_scene)
-            else: ui.notify("Scene Finished (no next scene).", color='orange')
+                load_scene(next_scene)
+            else:
+                ui.notify("Scene Finished (no next scene).", color='orange')
             return
 
         line = state.lines[state.line_idx]
-        name_label.text = line['char_name']; name_label.style(f"color: #{line['text_color']}")
-        text_label.text = line['content']; dialogue_card.visible = True
+        name_label.text = line['char_name']
+        name_label.style(f"color: #{line['text_color']}")
+        text_label.text = line['content']
+        dialogue_card.visible = True
 
         if line['sprite_path']:
-            s_path = line['sprite_path']; clean_path = s_path.replace('\\', '/')
-            if not clean_path.startswith('/'): clean_path = '/' + clean_path
+            s_path = line['sprite_path']
+            clean_path = s_path.replace('\\', '/')
+            if not clean_path.startswith('/'):
+                clean_path = '/' + clean_path
             print(f"LOADING SPRITE: {clean_path}") 
-            sprite_image.source = clean_path; sprite_image.style("display: block")
-        else: sprite_image.style("display: none")
+            sprite_image.source = clean_path
+            sprite_image.style("display: block")
+        else:
+            sprite_image.style("display: none")
 
-        if line['choice_id']: next_btn.visible = False; show_choices(line['choice_id'])
-        else: next_btn.visible = True
+        if line['choice_id']:
+            show_choices(line['choice_id'])
 
     load_scene(1)
 
